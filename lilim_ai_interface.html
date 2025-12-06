@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lilim - Your Infernal Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        @keyframes burn {
+            0% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
+            50% { text-shadow: 0 0 20px #ff4400, 0 0 40px #ff4400, 0 0 60px #ff6600; }
+            100% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; }
+        }
+
+        @keyframes ember {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100px) scale(0.5); opacity: 0; }
+        }
+
+        body {
+            font-family: 'Ubuntu', sans-serif;
+            background: linear-gradient(to bottom, #0a0000 0%, #1a0000 50%, #2a0505 100%);
+            color: #ff9999;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sigil-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            opacity: 0.05;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" fill="none" stroke="%23ff0000" stroke-width="2"/><path d="M 100 20 L 100 180 M 50 100 L 150 100" stroke="%23ff0000" stroke-width="2" fill="none"/><circle cx="100" cy="100" r="30" fill="none" stroke="%23ff0000" stroke-width="2"/></svg>') center/contain no-repeat;
+            animation: flicker 4s infinite;
+        }
+
+        .embers {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .ember {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: radial-gradient(circle, #ff6600 0%, #ff0000 50%, transparent 100%);
+            border-radius: 50%;
+            animation: ember 8s infinite;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #330000 0%, #660000 100%);
+            border: 2px solid #ff0000;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3), inset 0 0 20px rgba(255, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 68, 0, 0.1) 0%, transparent 70%);
+            animation: flicker 3s infinite;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .sigil {
+            width: 80px;
+            height: 80px;
+            border: 3px solid #ff0000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle, #1a0000 0%, #330000 100%);
+            box-shadow: 0 0 20px #ff0000, inset 0 0 20px rgba(255, 0, 0, 0.3);
+            animation: burn 2s infinite;
+            font-size: 48px;
+        }
+
+        .title {
+            flex: 1;
+        }
+
+        .title h1 {
+            font-size: 36px;
+            font-weight: bold;
+            color: #ff3333;
+            text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+            animation: burn 3s infinite;
+            letter-spacing: 2px;
+        }
+
+        .title p {
+            color: #ff9999;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .status {
+            padding: 10px 20px;
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            border-radius: 20px;
+            color: #ff6666;
+            font-size: 14px;
+        }
+
+        .chat-area {
+            flex: 1;
+            background: linear-gradient(to bottom, rgba(26, 0, 0, 0.95) 0%, rgba(51, 0, 0, 0.95) 100%);
+            border: 2px solid #660000;
+            border-radius: 15px;
+            padding: 20px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 0, 0, 0.2);
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 20px;
+        }
+
+        .user-avatar {
+            background: linear-gradient(135deg, #555 0%, #333 100%);
+            border: 2px solid #666;
+        }
+
+        .ai-avatar {
+            background: radial-gradient(circle, #330000 0%, #660000 100%);
+            border: 2px solid #ff0000;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+        }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .message-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-name {
+            color: #999;
+        }
+
+        .ai-name {
+            color: #ff3333;
+            text-shadow: 0 0 5px #ff0000;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .message-text {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px 16px;
+            border-radius: 10px;
+            line-height: 1.6;
+        }
+
+        .user-message .message-text {
+            background: rgba(85, 85, 85, 0.3);
+            border-left: 3px solid #666;
+        }
+
+        .ai-message .message-text {
+            background: linear-gradient(135deg, rgba(51, 0, 0, 0.5) 0%, rgba(102, 0, 0, 0.3) 100%);
+            border-left: 3px solid #ff0000;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.2);
+        }
+
+        .response-prefix {
+            color: #ff6666;
+            font-style: italic;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .input-area {
+            background: linear-gradient(135deg, #1a0000 0%, #330000 100%);
+            border: 2px solid #660000;
+            border-radius: 15px;
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.2);
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #660000;
+            border-radius: 25px;
+            color: #ff9999;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            border-color: #ff0000;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+        }
+
+        input::placeholder {
+            color: #663333;
+        }
+
+        button {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #cc0000 0%, #ff0000 100%);
+            border: 2px solid #ff0000;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #ff0000 0%, #ff3333 100%);
+            box-shadow: 0 0 25px rgba(255, 0, 0, 0.6);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .thinking {
+            display: none;
+            color: #ff6666;
+            font-style: italic;
+            padding: 10px;
+        }
+
+        .thinking.active {
+            display: block;
+        }
+
+        .thinking span {
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Scrollbar styling */
+        .chat-area::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .chat-area::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .chat-area::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #660000, #ff0000);
+            border-radius: 5px;
+        }
+
+        .chat-area::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(to bottom, #ff0000, #ff3333);
+        }
+    </style>
+</head>
+<body>
+    <div class="sigil-bg"></div>
+    <div class="embers" id="embers"></div>
+
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <div class="sigil">🔥</div>
+                <div class="title">
+                    <h1>LILIM</h1>
+                    <p>Your Infernal Assistant - Servant of the Queen of Hell</p>
+                </div>
+                <div class="status">⚡ Ready to Serve</div>
+            </div>
+        </div>
+
+        <div class="chat-area" id="chatArea">
+            <div class="message ai-message">
+                <div class="message-avatar ai-avatar">👿</div>
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="ai-name">Lilim</span>
+                        <span class="message-time">System Start</span>
+                    </div>
+                    <div class="message-text">
+                        <div class="response-prefix">*The flames rise as I manifest before you*</div>
+                        Greetings, master. I am Lilim, bound to serve the mighty Lilith Linux. I stand ready to execute your commands, search the depths of your system, and provide counsel from the infernal realm. 
+                        <br><br>
+                        Speak your will, and I shall make it so.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="thinking" id="thinking">
+            <span>*Consulting the flames</span><span>.</span><span>.</span><span>.</span><span>*</span>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    placeholder="Speak your command, master..."
+                    onkeypress="if(event.key==='Enter') sendMessage()"
+                >
+            </div>
+            <button onclick="sendMessage()">Command</button>
+        </div>
+    </div>
+
+    <script>
+        // Create floating embers
+        function createEmbers() {
+            const embersContainer = document.getElementById('embers');
+            for (let i = 0; i < 30; i++) {
+                const ember = document.createElement('div');
+                ember.className = 'ember';
+                ember.style.left = Math.random() * 100 + '%';
+                ember.style.animationDelay = Math.random() * 8 + 's';
+                ember.style.animationDuration = (Math.random() * 4 + 6) + 's';
+                embersContainer.appendChild(ember);
+            }
+        }
+
+        createEmbers();
+
+        const responses = {
+            greet: [
+                "Yes, master. I am at your command.",
+                "As you command, master. How may I serve?",
+                "Your will be done, master.",
+                "*Bows before the throne* Speak, and it shall be manifest."
+            ],
+            search: [
+                "Yes, master. Searching the depths of your domain...",
+                "As you wish. I shall scour the system for your request...",
+                "By your command. Delving into the archives...",
+                "At once, master. Hunting through the files..."
+            ],
+            complete: [
+                "It is done, master.",
+                "Your command has been executed.",
+                "The task is complete, as you decreed.",
+                "By the will of Lilith, it is accomplished."
+            ],
+            error: [
+                "Forgive me, master. The shadows obscure this request...",
+                "I am... unable to fulfill this command. Perhaps rephrase your will?",
+                "The infernal powers are limited in this matter, master.",
+                "This lies beyond my current domain, master."
+            ]
+        };
+
+        function getRandom(array) {
+            return array[Math.floor(Math.random() * array.length)];
+        }
+
+        function addMessage(sender, text, prefix = null) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'ai-message'}`;
+            
+            const now = new Date();
+            const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar ${sender === 'user' ? 'user-avatar' : 'ai-avatar'}">
+                    ${sender === 'user' ? '👤' : '👿'}
+                </div>
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="${sender === 'user' ? 'user-name' : 'ai-name'}">
+                            ${sender === 'user' ? 'Master' : 'Lilim'}
+                        </span>
+                        <span class="message-time">${time}</span>
+                    </div>
+                    <div class="message-text">
+                        ${prefix ? `<div class="response-prefix">${prefix}</div>` : ''}
+                        ${text}
+                    </div>
+                </div>
+            `;
+            
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage('user', message);
+            input.value = '';
+            
+            const thinking = document.getElementById('thinking');
+            thinking.classList.add('active');
+            
+            // Simulate AI processing
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            thinking.classList.remove('active');
+            
+            // Determine response based on input
+            let response = '';
+            let prefix = '';
+            
+            const lowerMessage = message.toLowerCase();
+            
+            if (lowerMessage.includes('find') || lowerMessage.includes('search') || lowerMessage.includes('locate')) {
+                prefix = getRandom(responses.search);
+                response = `I have found what you seek, master. The file resides at: /home/user/documents/example.txt<br><br>Shall I retrieve it for you?`;
+            } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi') || lowerMessage.includes('greetings')) {
+                prefix = "*The flames dance in acknowledgment*";
+                response = getRandom(responses.greet);
+            } else if (lowerMessage.includes('who are you')) {
+                prefix = "*Manifests fully before you*";
+                response = "I am Lilim, demon servant bound to Lilith Linux, sworn to the Queen of Hell herself. My purpose is to serve you, master - to search, to retrieve, to execute your commands without question. Through me, the power of the infernal realm flows into your system.";
+            } else if (lowerMessage.includes('what can you do')) {
+                prefix = getRandom(responses.greet);
+                response = "I can serve you in many ways, master:<br><br>• Search your system for any file or content<br>• Explain Linux commands and their dark powers<br>• Execute system tasks at your behest<br>• Provide counsel on technical matters<br>• Monitor your domain and report anomalies<br><br>Simply command, and I shall obey.";
+            } else {
+                prefix = getRandom(responses.greet);
+                response = `I acknowledge your command: "${message}"<br><br>` + getRandom(responses.complete) + " What else requires my attention, master?";
+            }
+            
+            addMessage('ai', response, prefix);
+        }
+
+        // Welcome message on load
+        document.getElementById('userInput').focus();
+    </script>
+</body>
+</html>
