@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "ai_engine": "llama-cpp",
+  "model": {
+    "size": "7B",
+    "quantization": "Q4_K_M",
+    "path": "/opt/lilith-ai/models/main-model.gguf"
+  },
+  "specialized_tasks": [
+    "sysadmin",
+    "coding",
+    "writing",
+    "academic",
+    "techsupport",
+    "research"
+  ],
+  "integration": {
+    "desktop_hotkey": true,
+    "context_menu": true,
+    "terminal_commands": true,
+    "systemd_service": true
+  },
+  "performance": {
+    "context_length": 2048,
+    "threads": "auto",
+    "gpu_acceleration": false
+  },
+  "api_fallback": {
+    "enabled": true,
+    "providers": ["openai", "anthropic"],
+    "complexity_threshold": 2048
+  },
+  "logging": {
+    "enabled": true,
+    "level": "info",
+    "path": "/opt/lilith-ai/logs/"
+  }
+}

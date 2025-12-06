@@ -1,0 +1,287 @@
+#!/bin/bash
+
+# Lilith AI Command Line Interface
+# Main entry point for Lilith Linux AI assistant
+
+set -e
+
+SCRIPT_DIR="/opt/lilith-ai/scripts"
+CONFIG_DIR="/opt/lilith-ai/config"
+LOG_DIR="/opt/lilith-ai/logs"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [LILITH] - $*" >> "$LOG_DIR/lilith.log"
+}
+
+# Display banner
+show_banner() {
+    echo -e "${PURPLE}"
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  🜏 𖤐 𐕣 Lilith AI Assistant - Intelligent Computing Platform 𓅓࣪ ִֶָ☾. ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+# Display help
+show_help() {
+    show_banner
+    echo -e "${CYAN}Lilith AI Assistant - Your demonic companion for intelligent computing${NC}"
+    echo ""
+    echo "USAGE:"
+    echo "  lilith \"your question here\"                    # General AI query"
+    echo "  lilith [command] \"your question\"              # Specialized command"
+    echo ""
+    echo "SPECIALIZED COMMANDS:"
+    echo -e "${YELLOW}Academic & Learning:${NC}"
+    echo "  study     \"topic\"         # Study help and explanations"
+    echo "  explain   \"concept\"       # Detailed explanations"
+    echo "  practice  \"skill\"         # Practice exercises"
+    echo "  quiz      \"topic\"          # Generate quizzes"
+    echo "  help      \"assignment\"     # Academic assistance"
+    echo ""
+    echo -e "${YELLOW}System Administration:${NC}"
+    echo "  ask       \"question\"      # System administration questions"
+    echo "  diagnose  \"problem\"       # System diagnostics"
+    echo "  fix       \"issue\"         # Troubleshooting and fixes"
+    echo ""
+    echo -e "${YELLOW}Programming & Development:${NC}"
+    echo "  analyze   \"code\"          # Code analysis"
+    echo "  debug     \"problem\"       # Debug assistance"
+    echo "  review    \"code\"          # Code review"
+    echo "  optimize  \"code\"          # Performance optimization"
+    echo "  generate  \"feature\"       # Code generation"
+    echo ""
+    echo -e "${YELLOW}Creative Writing:${NC}"
+    echo "  write     \"topic\"         # Content creation"
+    echo "  edit      \"text\"          # Text editing"
+    echo "  proofread \"document\"      # Proofreading"
+    echo ""
+    echo -e "${YELLOW}Technical Support:${NC}"
+    echo "  diagnose  \"symptom\"       # Problem diagnosis"
+    echo "  fix       \"error\"         # Error resolution"
+    echo "  guide     \"task\"          # Step-by-step guides"
+    echo ""
+    echo -e "${YELLOW}Research & Learning:${NC}"
+    echo "  search    \"topic\"         # Information search"
+    echo "  summarize \"content\"       # Content summarization"
+    echo "  learn     \"subject\"       # Learning resources"
+    echo "  research  \"query\"         # Research assistance"
+    echo ""
+    echo -e "${YELLOW}Management Commands:${NC}"
+    echo "  lilith --status            # Show AI system status"
+    echo "  lilith --setup             # Run initial setup"
+    echo "  lilith --update            # Update AI models"
+    echo "  lilith --config            # Show configuration"
+    echo ""
+    echo -e "${BLUE}Hotkey: Ctrl+Alt+A for instant AI access${NC}"
+    echo -e "${BLUE}Website: https://github.com/BlancoBAM/Lilith-Linux${NC}"
+    echo ""
+}
+
+# Check if AI system is available
+check_system() {
+    if [ ! -d "$SCRIPT_DIR" ]; then
+        echo -e "${RED}Error: Lilith AI system not found. Run setup first.${NC}"
+        echo "Try: lilith --setup"
+        exit 1
+    fi
+}
+
+# Show system status
+show_status() {
+    show_banner
+    echo -e "${CYAN}Lilith AI System Status${NC}"
+    echo ""
+
+    # Check directories
+    echo -e "${YELLOW}Directories:${NC}"
+    for dir in "$SCRIPT_DIR" "$CONFIG_DIR" "$LOG_DIR"; do
+        if [ -d "$dir" ]; then
+            echo -e "  ✅ $(basename "$dir")"
+        else
+            echo -e "  ❌ $(basename "$dir")"
+        fi
+    done
+
+    # Check model
+    echo ""
+    echo -e "${YELLOW}AI Model:${NC}"
+    if [ -f "/opt/lilith-ai/models/main-model.gguf" ]; then
+        model_size=$(du -h "/opt/lilith-ai/models/main-model.gguf" | cut -f1)
+        echo -e "  ✅ Model loaded (${model_size})"
+    else
+        echo -e "  ❌ No model found"
+    fi
+
+    # Check APIs
+    echo ""
+    echo -e "${YELLOW}API Providers:${NC}"
+    if command -v python3 >/dev/null 2>&1; then
+        available_apis=$("$SCRIPT_DIR/api-fallback.py" --list 2>/dev/null)
+        if [ -n "$available_apis" ]; then
+            echo "$available_apis" | while read -r api; do
+                echo -e "  ✅ $api"
+            done
+        else
+            echo -e "  ❌ No API keys configured"
+        fi
+    else
+        echo -e "  ❌ Python3 not available"
+    fi
+
+    # Check services
+    echo ""
+    echo -e "${YELLOW}Services:${NC}"
+    if systemctl is-active --quiet lilith-ai 2>/dev/null; then
+        echo -e "  ✅ lilith-ai service running"
+    else
+        echo -e "  ❌ lilith-ai service not running"
+    fi
+
+    # Recent activity
+    echo ""
+    echo -e "${YELLOW}Recent Activity:${NC}"
+    if [ -f "$LOG_DIR/lilith.log" ]; then
+        tail -5 "$LOG_DIR/lilith.log" | while read -r line; do
+            echo "  $line"
+        done
+    else
+        echo "  No recent activity"
+    fi
+
+    echo ""
+}
+
+# Process query with specified task
+process_query() {
+    local task="$1"
+    local query="$2"
+    local output_file="/tmp/lilith-response-$RANDOM.txt"
+
+    log "Processing query: $query (task: $task)"
+
+    # Show processing indicator
+    echo -e "${BLUE}🤖 Lilith is thinking...${NC}"
+
+    # Process the query
+    if bash "$SCRIPT_DIR/process-query.sh" "$query" "$output_file" "$task"; then
+        echo ""
+        echo -e "${GREEN}💡 Lilith's Response:${NC}"
+        echo "═══════════════════════════════════════════════════════════════"
+        cat "$output_file"
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════"
+        echo -e "${PURPLE}Response saved to: $output_file${NC}"
+    else
+        echo -e "${RED}❌ Error processing query${NC}"
+        exit 1
+    fi
+}
+
+# Main command processing
+case "$1" in
+    --help|-h)
+        show_help
+        ;;
+    --status)
+        check_system
+        show_status
+        ;;
+    --setup)
+        echo "Running Lilith AI setup..."
+        if [ -f "/opt/lilith-ai/lilith-ai-setup.sh" ]; then
+            sudo bash /opt/lilith-ai/lilith-ai-setup.sh
+        else
+            echo -e "${RED}Setup script not found. Please run the complete Lilith Linux setup.${NC}"
+            exit 1
+        fi
+        ;;
+    --update)
+        echo "Updating Lilith AI models..."
+        # Placeholder for model update functionality
+        echo "Model update functionality coming soon"
+        ;;
+    --config)
+        check_system
+        echo "Lilith AI Configuration:"
+        echo "═══════════════════════"
+        if [ -f "$CONFIG_DIR/ai-config.json" ]; then
+            cat "$CONFIG_DIR/ai-config.json"
+        else
+            echo "Configuration file not found"
+        fi
+        ;;
+    study|explain|practice|quiz|help)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "academic" "$*"
+        ;;
+    ask|diagnose|fix|optimize|monitor|configure)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "sysadmin" "$*"
+        ;;
+    analyze|debug|review|generate)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "coding" "$*"
+        ;;
+    write|edit|proofread)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "writing" "$*"
+        ;;
+    guide)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "techsupport" "$*"
+        ;;
+    search|summarize|learn|research|find)
+        check_system
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: Please provide a query${NC}"
+            echo "Usage: lilith $1 \"your question\""
+            exit 1
+        fi
+        process_query "research" "$*"
+        ;;
+    *)
+        # General query or no arguments
+        if [ -z "$1" ]; then
+            show_help
+        else
+            check_system
+            process_query "auto" "$*"
+        fi
+        ;;
+esac
