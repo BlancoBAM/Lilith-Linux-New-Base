@@ -8,7 +8,7 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR"
-REPO_URL="https://github.com/BlancoBAM/Lilith-Linux-New-Base.git"
+REPO_URL="https://github.com/BlancoBAM/Lilith-Base.git"
 BRANCH="master"
 
 # Colors
@@ -76,15 +76,26 @@ setup_ssh() {
     read -p "Do you want to set up SSH keys for repository access? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if [ ! -f "$HOME/.ssh/id_rsa" ]; then
+        if [ ! -f "$HOME/.ssh/id_rsa" ] || [ ! -f "$HOME/.ssh/id_rsa.pub" ]; then
             info "Generating SSH key..."
             ssh-keygen -t rsa -b 4096 -C "lilith-rebirth-build@local" -f "$HOME/.ssh/id_rsa" -N ""
             log "✅ SSH key generated"
             log "Public key (add to GitHub):"
             cat "$HOME/.ssh/id_rsa.pub"
+            echo ""
             read -p "Press Enter after adding the key to GitHub..."
         else
             log "✅ SSH key already exists"
+            log "If you have issues with GitHub access, ensure the key is added to:"
+            log "https://github.com/settings/keys"
+        fi
+
+        # Test SSH connection to GitHub
+        info "Testing SSH connection to GitHub..."
+        if ssh -T git@github.com -o StrictHostKeyChecking=no -o ConnectTimeout=10 2>&1 | grep -q "successfully authenticated"; then
+            log "✅ SSH authentication successful"
+        else
+            warn "SSH authentication test failed - you may need to add the key to GitHub"
         fi
     else
         warn "Skipping SSH setup - using HTTPS authentication"
@@ -130,7 +141,7 @@ sync_repo() {
 embed_ai_bundle() {
     log "🤖 Embedding AI Bundle"
 
-    local bundle_src="$BUILD_DIR/build-system/sources/scripts/ai-integration/lilith_bundle.yaml"
+    local bundle_src="$BUILD_DIR/ai-bundle/lilith_bundle.yaml"
     local bundle_dest="$BUILD_DIR/lilith-system-root/opt/lilith/lilith_bundle.yaml"
 
     if [ -f "$bundle_src" ]; then
