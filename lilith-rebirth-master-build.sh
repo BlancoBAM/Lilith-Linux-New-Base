@@ -145,9 +145,8 @@ embed_ai_bundle() {
     local bundle_dest="$BUILD_DIR/lilith-system-root/opt/lilith/lilith_bundle.yaml"
 
     if [ -f "$bundle_src" ]; then
-        mkdir -p "$(dirname "$bundle_dest")"
-        cp "$bundle_src" "$bundle_dest"
-        log "✅ AI bundle embedded at: $bundle_dest"
+        # The bundle will be copied during the base system setup process
+        log "✅ AI bundle prepared for embedding"
     else
         error "AI bundle not found at: $bundle_src"
     fi
@@ -218,59 +217,8 @@ EOF
 setup_users_and_services() {
     log "👤 Setting up Users and Services"
 
-    # Create queen user
-    if ! id "queen" &>/dev/null; then
-        sudo useradd -m -s /bin/bash queen
-        echo "queen:666" | sudo chpasswd
-        sudo usermod -aG sudo,adm,dialout,cdrom,floppy,audio,dip,video,plugdev queen
-        log "✅ Created user 'queen' with password '666'"
-    else
-        log "✅ User 'queen' already exists"
-    fi
-
-    # Create lilith user for AI services
-    if ! id "lilith" &>/dev/null; then
-        sudo useradd -m -s /bin/bash -d /opt/lilith lilith
-        sudo usermod -aG dialout,audio,video lilith
-        log "✅ Created user 'lilith' for AI services"
-    else
-        log "✅ User 'lilith' already exists"
-    fi
-
-    # Set up systemd services
-    log "🔧 Configuring systemd services..."
-
-    # SDDM autologin for queen
-    if [ -f "/etc/sddm.conf" ]; then
-        sudo tee -a /etc/sddm.conf > /dev/null << EOF
-
-[Autologin]
-User=queen
-Session=plasma.desktop
-EOF
-        log "✅ SDDM autologin configured for queen"
-    fi
-
-    # One-shot rebirth ceremony service
-    sudo tee /etc/systemd/system/lilith-rebirth-ceremony.service > /dev/null << EOF
-[Unit]
-Description=Lilith Rebirth Ceremony (One-shot)
-After=graphical.target
-ConditionPathExists=!/home/queen/.lilith-rebirth-completed
-
-[Service]
-Type=oneshot
-User=queen
-Environment=DISPLAY=:0
-ExecStart=/opt/lilith-firstboot/rebirth-birthday.sh
-RemainAfterExit=no
-
-[Install]
-WantedBy=graphical.target
-EOF
-
-    sudo systemctl enable lilith-rebirth-ceremony.service
-    log "✅ Rebirth ceremony service configured"
+    # These configurations will be applied inside the system root during base system setup
+    log "ℹ️  User and service configurations will be applied during base system setup"
 }
 
 # Phase 7: Set up first boot integration
@@ -289,7 +237,7 @@ setup_first_boot() {
     fi
 
     # Create lilith-post-install.sh for first boot
-    sudo tee /opt/lilith-firstboot/lilith-post-install.sh > /dev/null << "EOF"
+    sudo bash -c 'cat > /opt/lilith-firstboot/lilith-post-install.sh << '\''EOF'\''
 #!/bin/bash
 # Lilith Post-Install Script - Runs on first boot
 
@@ -299,7 +247,7 @@ BUNDLE_FILE="/opt/lilith/lilith_bundle.yaml"
 EXTRACT_DIR="/opt/lilith"
 
 log() {
-    echo "[$(date +'%H:%M:%S')] $1"
+    echo "[$(date +'\''%H:%M:%S'\'')] $1"
 }
 
 log "🔥 Lilith Post-Install: Extracting AI Bundle..."
@@ -322,28 +270,28 @@ import os
 from pathlib import Path
 
 # Load bundle
-with open('$BUNDLE_FILE', 'r') as f:
+with open('\''$BUNDLE_FILE'\'', '\''r'\'') as f:
     bundle = yaml.safe_load(f)
 
 # Create directories
-for dirname in ['services', 'scripts', 'config', 'knowledge-base', 'logs', 'training-data']:
-    Path(f'$EXTRACT_DIR/{dirname}').mkdir(parents=True, exist_ok=True)
+for dirname in ['\''services'\'', '\''scripts'\'', '\''config'\'', '\''knowledge-base'\'', '\''logs'\'', '\''training-data'\'']:
+    Path(f'\''$EXTRACT_DIR/{dirname}'\'').mkdir(parents=True, exist_ok=True)
 
 # Extract files
-for filename, content_b64 in bundle['files'].items():
+for filename, content_b64 in bundle['\''files'\''].items():
     content = base64.b64decode(content_b64)
-    filepath = Path('$EXTRACT_DIR') / filename
-    
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    
-    # Make scripts executable
-    if filename.endswith('.sh') or filename.endswith('.py'):
-        os.chmod(filepath, 0o755)
-    
-    print(f'Extracted: {filename}')
+    filepath = Path('\''$EXTRACT_DIR'\'') / filename
 
-print('✅ Bundle extraction complete')
+    with open(filepath, '\''wb'\'') as f:
+        f.write(content)
+
+    # Make scripts executable
+    if filename.endswith('\''.sh'\'') or filename.endswith('\''.py'\''):
+        os.chmod(filepath, 0o755)
+
+    print(f'\''Extracted: {filename}'\'')
+
+print('\''✅ Bundle extraction complete'\'')
 "
 
 # Create lilith user home if needed
@@ -366,28 +314,26 @@ systemctl enable lilith-daemon.service 2>/dev/null || true
 # Set up hotkey (Super+Space)
 log "🔥 Setting up hotkey (Super+Space)..."
 sudo -u queen mkdir -p /home/queen/.config/sxhkd
-cat << 'EOF' | sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null
+cat << '\''EOF'\'' | sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null
 super + space
     /opt/lilith/scripts/summon-assistant.sh
 EOF
-sudo chown queen:queen /home/queen/.config/sxhkd/sxhkdrc 2>/dev/null || log "Note: File ownership may already be correct"
+sudo chown queen:queen /home/queen/.config/sxhkd/sxhkdrc 2>/dev/null || echo "Note: File ownership may already be correct"
 
 # Clean up
 rm -f "$BUNDLE_FILE"
 log "✅ Post-install complete! AI system ready."
-EOF
+EOF'
 
     sudo chmod +x /opt/lilith-firstboot/lilith-post-install.sh
 
     # Add to rc.local for first boot execution
-    sudo tee -a /etc/rc.local > /dev/null << 'EOF'
-
+    echo "
 # Lilith first boot setup
 if [ ! -f /var/lib/lilith-first-boot-completed ]; then
     /opt/lilith-firstboot/lilith-post-install.sh >> /var/log/lilith-first-boot.log 2>&1
     touch /var/lib/lilith-first-boot-completed
-fi
-EOF
+fi" | sudo tee -a /etc/rc.local > /dev/null
 
     log "✅ First boot integration configured"
 }

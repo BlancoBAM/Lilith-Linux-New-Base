@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Lilith Shape Shifter
+Comment=Desktop Environment Switcher
+Exec=/usr/bin/lilith-shapeshifter
+Icon=preferences-system-windows
+Terminal=false
+Type=Application
+Categories=Settings;DesktopSettings;
+Keywords=desktop;environment;switcher;plasma;gnome;xfce;

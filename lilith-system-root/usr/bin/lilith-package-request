@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+import sys
+import webbrowser
+import urllib.parse
+from PyQt6.QtWidgets import QApplication, QMessageBox
+
+def main():
+    app = QApplication(sys.argv)
+
+    target = sys.argv[1] if len(sys.argv) > 1 else "Unknown App"
+    filename = target.split('/')[-1]
+
+    # Construct GitHub Issue URL
+    base_url = "https://github.com/Lilith-Linux/packages/issues/new"
+    title = f"Request Official Package: {filename}"
+    body = f"""**Package Request**
+
+I would like to request that '{filename}' be made into an official, optimized Lilith Linux package.
+
+**Type:** App/Binary
+**Path:** {target}
+**Reason:** [Enter reason here]
+"""
+
+    params = {
+        "title": title,
+        "body": body,
+        "labels": "package-request"
+    }
+
+    query = urllib.parse.urlencode(params)
+    full_url = f"{base_url}?{query}"
+
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Icon.Question)
+    msg.setText(f"Request Official Package for {filename}?")
+    msg.setInformativeText("This will open a GitHub issue template in your browser.")
+    msg.setWindowTitle("Lilith Package Bazaar")
+    msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+    if msg.exec() == QMessageBox.StandardButton.Yes:
+        print(f"Opening: {full_url}")
+        webbrowser.open(full_url)
+
+if __name__ == "__main__":
+    main()

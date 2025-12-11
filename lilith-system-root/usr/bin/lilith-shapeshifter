@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""
+Lilith Shape Shifter - Desktop Environment Switcher
+GUI Application to switch between different desktop environments
+"""
+
+import sys
+import os
+import subprocess
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
+                            QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+                            QComboBox, QTextEdit, QMessageBox, QGroupBox,
+                            QTabWidget, QListWidget, QListWidgetItem)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QFont
+
+class DEInstallerThread(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(bool)
+    
+    def __init__(self, de_name):
+        super().__init__()
+        self.de_name = de_name
+    
+    def run(self):
+        try:
+            self.progress.emit(f"Installing {self.de_name}...")
+            
+            # Install commands for different desktop environments
+            install_commands = {
+                'KDE Plasma': ['sudo', 'apt', 'install', '-y', 'kde-plasma-desktop'],
+                'GNOME': ['sudo', 'apt', 'install', '-y', 'ubuntu-gnome-desktop'],
+                'XFCE': ['sudo', 'apt', 'install', '-y', 'xubuntu-desktop'],
+                'LXQt': ['sudo', 'apt', 'install', '-y', 'lxqt'],
+                'MATE': ['sudo', 'apt', 'install', '-y', 'ubuntu-mate-desktop'],
+                'Cinnamon': ['sudo', 'apt', 'install', '-y', 'cinnamon-desktop-environment']
+            }
+            
+            if self.de_name in install_commands:
+                result = subprocess.run(install_commands[self.de_name], 
+                                      capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    self.progress.emit(f"{self.de_name} installed successfully!")
+                    self.finished.emit(True)
+                else:
+                    self.progress.emit(f"Error installing {self.de_name}: {result.stderr}")
+                    self.finished.emit(False)
+            else:
+                self.progress.emit(f"Unknown desktop environment: {self.de_name}")
+                self.finished.emit(False)
+        except Exception as e:
+            self.progress.emit(f"Exception during installation: {str(e)}")
+            self.finished.emit(False)
+
+class ShapeShifterGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Lilith Shape Shifter")
+        self.setGeometry(100, 100, 700, 600)
+        
+        # Set style
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #2d0a2e;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #7c1487;
+                color: white;
+                border: none;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #a81db3;
+            }
+            QComboBox {
+                background-color: #3a1a40;
+                color: white;
+                padding: 5px;
+                border: 1px solid #7c1487;
+                border-radius: 3px;
+            }
+            QTextEdit {
+                background-color: #1a061b;
+                color: #e0e0e0;
+                border: 1px solid #7c1487;
+                border-radius: 3px;
+            }
+            QListWidget {
+                background-color: #3a1a40;
+                color: white;
+                border: 1px solid #7c1487;
+            }
+        """)
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
+        
+        # Title
+        title_label = QLabel("🔥 Lilith Shape Shifter 🔥")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+        
+        subtitle = QLabel("Switch Between Desktop Environments")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setFont(QFont("Arial", 12))
+        layout.addWidget(subtitle)
+        
+        layout.addSpacing(20)
+        
+        # Main tabs
+        self.tabs = QTabWidget()
+        
+        # Installation Tab
+        install_tab = QWidget()
+        install_layout = QVBoxLayout()
+        
+        # DE Selection Group
+        de_group = QGroupBox("Install Desktop Environment")
+        de_layout = QVBoxLayout()
+        
+        # DE selection combo box
+        de_label = QLabel("Choose Desktop Environment:")
+        de_layout.addWidget(de_label)
+        
+        self.de_combo = QComboBox()
+        self.de_combo.addItems([
+            "KDE Plasma", "GNOME", "XFCE", "LXQt", "MATE", "Cinnamon"
+        ])
+        de_layout.addWidget(self.de_combo)
+        
+        # Install button
+        self.install_btn = QPushButton("Install Selected Desktop Environment")
+        self.install_btn.clicked.connect(self.install_desktop_env)
+        de_layout.addWidget(self.install_btn)
+        
+        # Set default selection
+        self.de_combo.setCurrentText("KDE Plasma")
+        
+        de_group.setLayout(de_layout)
+        install_layout.addWidget(de_group)
+        
+        # Current DE Info
+        current_group = QGroupBox("Current Desktop Environment")
+        current_layout = QVBoxLayout()
+        
+        # Get current desktop info
+        try:
+            current_de = os.environ.get('XDG_CURRENT_DESKTOP', 'Unknown')
+            if current_de == '':
+                current_de = 'Unknown'
+        except:
+            current_de = 'Unknown'
+            
+        current_label = QLabel(f"Current Desktop: {current_de}")
+        current_layout.addWidget(current_label)
+        
+        current_group.setLayout(current_layout)
+        install_layout.addWidget(current_group)
+        
+        # Apply Session Button
+        self.apply_btn = QPushButton("Apply Session (Logout Required)")
+        self.apply_btn.clicked.connect(self.apply_session)
+        install_layout.addWidget(self.apply_btn)
+        
+        # Log output
+        log_label = QLabel("Installation Log:")
+        install_layout.addWidget(log_label)
+        
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+        install_layout.addWidget(self.log_output)
+        
+        # Add some initial log info
+        self.log_output.append(f"Current Desktop Environment: {current_de}")
+        self.log_output.append("Select a desktop environment and click Install to begin.")
+        
+        install_tab.setLayout(install_layout)
+        self.tabs.addTab(install_tab, "Install DE")
+        
+        # Available DEs Tab
+        available_tab = QWidget()
+        available_layout = QVBoxLayout()
+        
+        available_label = QLabel("Currently Installed Desktop Environments:")
+        available_layout.addWidget(available_label)
+        
+        self.available_list = QListWidget()
+        self.scan_installed_desktops()
+        available_layout.addWidget(self.available_list)
+        
+        # Scan button
+        scan_btn = QPushButton("Refresh Desktop List")
+        scan_btn.clicked.connect(self.scan_installed_desktops)
+        available_layout.addWidget(scan_btn)
+        
+        available_tab.setLayout(available_layout)
+        self.tabs.addTab(available_tab, "Available DEs")
+        
+        layout.addWidget(self.tabs)
+        
+        # Thread for installation
+        self.install_thread = None
+        
+    def scan_installed_desktops(self):
+        """Scan for installed desktop environments"""
+        self.available_list.clear()
+        
+        # Check for installed desktop environments
+        desktops = [
+            ('KDE Plasma', '/usr/bin/startplasma-x11'),
+            ('GNOME', '/usr/bin/gnome-session'),
+            ('XFCE', '/usr/bin/startxfce4'),
+            ('LXQt', '/usr/bin/startlxqt'),
+            ('MATE', '/usr/bin/mate-session'),
+            ('Cinnamon', '/usr/bin/cinnamon-session'),
+            ('LXDE', '/usr/bin/startlxde'),
+        ]
+        
+        found_desktops = []
+        for name, path in desktops:
+            if os.path.exists(path):
+                found_desktops.append(name)
+        
+        if found_desktops:
+            for desktop in found_desktops:
+                item = QListWidgetItem(f"✓ {desktop}")
+                self.available_list.addItem(item)
+        else:
+            item = QListWidgetItem("No desktop environments found")
+            self.available_list.addItem(item)
+    
+    def install_desktop_env(self):
+        selected_de = self.de_combo.currentText()
+        
+        reply = QMessageBox.question(
+            self, 
+            "Confirm Installation", 
+            f"Are you sure you want to install {selected_de}?\n\nThis may take some time.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.log_output.append(f"Starting installation of {selected_de}...")
+            
+            # Disable button during installation
+            self.install_btn.setEnabled(False)
+            
+            # Start installation thread
+            self.install_thread = DEInstallerThread(selected_de)
+            self.install_thread.progress.connect(self.update_log)
+            self.install_thread.finished.connect(self.installation_finished)
+            self.install_thread.start()
+    
+    def update_log(self, message):
+        self.log_output.append(message)
+        
+    def installation_finished(self, success):
+        self.install_btn.setEnabled(True)
+        
+        if success:
+            QMessageBox.information(
+                self, 
+                "Installation Complete", 
+                "Desktop environment installed successfully! You may need to log out and back in to see changes."
+            )
+            self.scan_installed_desktops()  # Refresh the available DEs list
+        else:
+            QMessageBox.critical(
+                self, 
+                "Installation Failed", 
+                "Installation failed. Please check the log for details."
+            )
+    
+    def apply_session(self):
+        reply = QMessageBox.question(
+            self,
+            "Apply Session",
+            "This will log you out to apply the new desktop environment. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Logout using the session manager
+                subprocess.run(['gnome-session-quit', '--logout', '--no-prompt'], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                try:
+                    # Fallback to lightdm
+                    subprocess.run(['dm-tool', 'logout'], 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except:
+                    try:
+                        # Fallback to KDE
+                        subprocess.run(['qdbus', 'org.kde.ksmserver', '/KSMServer', 
+                                      'org.kde.KSMServerInterface.logout', '0', '0', '0'], 
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except:
+                        QMessageBox.warning(self, "Logout Failed", 
+                                          "Could not automatically log out. Please log out manually.")
+
+def main():
+    app = QApplication(sys.argv)
+    window = ShapeShifterGUI()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

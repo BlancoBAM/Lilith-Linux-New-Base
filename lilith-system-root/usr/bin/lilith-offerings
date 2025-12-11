@@ -1,0 +1,714 @@
+#!/usr/bin/env python3
+"""
+Lilith Offerings - Universal App Store & AI Model Hub
+Multi-tab application for managing packages from various sources
+"""
+
+import sys
+import os
+import subprocess
+import json
+import threading
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, 
+                            QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+                            QTabWidget, QListWidget, QListWidgetItem, 
+                            QTextEdit, QLineEdit, QSplitter, QGroupBox,
+                            QMessageBox, QProgressBar, QDialog, QComboBox,
+                            QFormLayout, QCheckBox, QHeaderView)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QPixmap, QIcon
+import requests
+from datetime import datetime
+
+class PackageManager:
+    """Handles different package management systems"""
+    
+    @staticmethod
+    def get_apt_packages():
+        """Get list of available apt packages"""
+        try:
+            result = subprocess.run(['apt', 'list', '--upgradable'], 
+                                  capture_output=True, text=True)
+            upgradable = result.stdout.strip().split('\n')[1:]  # Skip header
+            
+            result = subprocess.run(['apt', 'list', '--installed'], 
+                                  capture_output=True, text=True)
+            installed = result.stdout.strip().split('\n')[1:]
+            
+            packages = []
+            for line in upgradable:
+                if line.strip():
+                    pkg_info = line.split('/')
+                    if len(pkg_info) > 0:
+                        pkg_name = pkg_info[0]
+                        packages.append({
+                            'name': pkg_name,
+                            'source': 'apt',
+                            'status': 'upgradable',
+                            'description': 'Apt package (upgradable)'
+                        })
+            
+            # Add some sample available packages
+            sample_packages = [
+                {'name': 'firefox', 'source': 'apt', 'status': 'available', 'description': 'Web Browser'},
+                {'name': 'vlc', 'source': 'apt', 'status': 'available', 'description': 'Media Player'},
+                {'name': 'gimp', 'source': 'apt', 'status': 'available', 'description': 'Image Editor'},
+                {'name': 'code', 'source': 'apt', 'status': 'available', 'description': 'Visual Studio Code'},
+            ]
+            packages.extend(sample_packages)
+            
+            return packages
+        except:
+            return []
+    
+    @staticmethod
+    def get_flatpak_packages():
+        """Get list of available flatpak packages"""
+        try:
+            result = subprocess.run(['flatpak', 'remote-ls', '--available'], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = []
+                for line in result.stdout.split('\n'):
+                    if line.strip() and not line.startswith('Name'):
+                        parts = line.split('\t')
+                        if len(parts) >= 2:
+                            packages.append({
+                                'name': parts[0],
+                                'source': 'flatpak',
+                                'status': 'available',
+                                'description': f'Flatpak app: {parts[0]}'
+                            })
+                return packages
+            else:
+                # Return sample packages if flatpak not available
+                return [
+                    {'name': 'org.gimp.GIMP', 'source': 'flatpak', 'status': 'available', 'description': 'GIMP (Flatpak)'},
+                    {'name': 'org.videolan.VLC', 'source': 'flatpak', 'status': 'available', 'description': 'VLC (Flatpak)'},
+                    {'name': 'com.visualstudio.code', 'source': 'flatpak', 'status': 'available', 'description': 'VS Code (Flatpak)'},
+                ]
+        except:
+            return [
+                {'name': 'org.gimp.GIMP', 'source': 'flatpak', 'status': 'available', 'description': 'GIMP (Flatpak)'},
+                {'name': 'org.videolan.VLC', 'source': 'flatpak', 'status': 'available', 'description': 'VLC (Flatpak)'},
+                {'name': 'com.visualstudio.code', 'source': 'flatpak', 'status': 'available', 'description': 'VS Code (Flatpak)'},
+            ]
+    
+    @staticmethod
+    def get_snap_packages():
+        """Get list of available snap packages"""
+        try:
+            result = subprocess.run(['snap', 'find'], 
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                packages = []
+                lines = result.stdout.strip().split('\n')[1:]  # Skip header
+                for line in lines:
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            packages.append({
+                                'name': parts[0],
+                                'source': 'snap',
+                                'status': 'available',
+                                'description': f'Snap package: {parts[0]}'
+                            })
+                return packages
+            else:
+                # Return sample packages if snap find fails
+                return [
+                    {'name': 'code', 'source': 'snap', 'status': 'available', 'description': 'VS Code (Snap)'},
+                    {'name': 'vlc', 'source': 'snap', 'status': 'available', 'description': 'VLC (Snap)'},
+                    {'name': 'discord', 'source': 'snap', 'status': 'available', 'description': 'Discord (Snap)'},
+                ]
+        except:
+            return [
+                {'name': 'code', 'source': 'snap', 'status': 'available', 'description': 'VS Code (Snap)'},
+                {'name': 'vlc', 'source': 'snap', 'status': 'available', 'description': 'VLC (Snap)'},
+                {'name': 'discord', 'source': 'snap', 'status': 'available', 'description': 'Discord (Snap)'},
+            ]
+    
+    @staticmethod
+    def get_lilith_binaries():
+        """Get list of official Lilith binaries"""
+        # In a real implementation, this would fetch from Lilith-Packages repo
+        return [
+            {'name': 'lilith-shapeshifter', 'source': 'lilith', 'status': 'available', 'description': 'Lilith Desktop Environment Switcher'},
+            {'name': 'lilith-offerings', 'source': 'lilith', 'status': 'installed', 'description': 'Lilith Universal App Store'},
+            {'name': 'lilith-bazaar', 'source': 'lilith', 'status': 'available', 'description': 'Lilith AI-Powered Marketplace'},
+            {'name': 'lilith-package-request', 'source': 'lilith', 'status': 'installed', 'description': 'Lilith Package Request Tool'},
+        ]
+
+class AIModelManager:
+    """Handles AI model operations"""
+    
+    @staticmethod
+    def get_available_models():
+        """Get list of available AI models"""
+        # In a real implementation, this would connect to Ollama or other AI services
+        return [
+            {'name': 'phi3:mini', 'size': '1.8 GB', 'source': 'ollama', 'description': 'Microsoft Phi-3 Mini - Small, efficient model for general tasks'},
+            {'name': 'mistral:7b', 'size': '4.1 GB', 'source': 'ollama', 'description': 'Mistral 7B - General purpose model with good reasoning'},
+            {'name': 'llama3:8b', 'size': '4.7 GB', 'source': 'ollama', 'description': 'Meta Llama 3 8B - State-of-the-art open model'},
+            {'name': 'gemma:2b', 'size': '1.4 GB', 'source': 'ollama', 'description': 'Google Gemma 2B - Efficient model for text generation'},
+            {'name': 'qwen:7b', 'size': '4.3 GB', 'source': 'ollama', 'description': 'Alibaba Qwen 7B - Multilingual model with code capabilities'},
+        ]
+    
+    @staticmethod
+    def get_optimized_models_for_hardware():
+        """Get AI models optimized for current hardware"""
+        # Check system specs and recommend appropriate models
+        try:
+            # Check available RAM
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = f.read()
+            
+            # Basic logic for hardware optimization
+            # In a real implementation, this would be more sophisticated
+            ram_gb = 8  # Default value
+            
+            for line in meminfo.split('\n'):
+                if line.startswith('MemTotal:'):
+                    total_kb = int(line.split()[1])
+                    ram_gb = total_kb / 1024 / 1024  # Convert to GB
+                    break
+            
+            if ram_gb < 4:
+                # Recommend smaller models for low RAM
+                return [
+                    {'name': 'phi3:mini', 'size': '1.8 GB', 'source': 'ollama', 'description': 'Optimized for low-RAM systems (1.8GB)'},
+                    {'name': 'gemma:2b', 'size': '1.4 GB', 'source': 'ollama', 'description': 'Optimized for low-RAM systems (1.4GB)'},
+                ]
+            elif ram_gb < 8:
+                # Recommend medium models for moderate RAM
+                return [
+                    {'name': 'phi3:mini', 'size': '1.8 GB', 'source': 'ollama', 'description': 'Good balance for moderate systems (1.8GB)'},
+                    {'name': 'gemma:2b', 'size': '1.4 GB', 'source': 'ollama', 'description': 'Lightweight option (1.4GB)'},
+                    {'name': 'mistral:7b', 'size': '4.1 GB', 'source': 'ollama', 'description': 'Good for moderate systems (4.1GB)'},
+                ]
+            else:
+                # Recommend larger models for high RAM
+                return [
+                    {'name': 'phi3:mini', 'size': '1.8 GB', 'source': 'ollama', 'description': 'Efficient model (1.8GB)'},
+                    {'name': 'mistral:7b', 'size': '4.1 GB', 'source': 'ollama', 'description': 'General purpose (4.1GB)'},
+                    {'name': 'llama3:8b', 'size': '4.7 GB', 'source': 'ollama', 'description': 'High-performance (4.7GB)'},
+                ]
+        except:
+            # Default to all models if can't determine hardware
+            return AIModelManager.get_available_models()
+
+class PackageInstallerThread(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(bool)
+    
+    def __init__(self, package_data):
+        super().__init__()
+        self.package_data = package_data
+    
+    def run(self):
+        try:
+            pkg_name = self.package_data['name']
+            source = self.package_data['source']
+            
+            self.progress.emit(f"Installing {pkg_name} from {source}...")
+            
+            if source == 'apt':
+                result = subprocess.run(['sudo', 'apt', 'install', '-y', pkg_name], 
+                                      capture_output=True, text=True)
+            elif source == 'flatpak':
+                result = subprocess.run(['flatpak', 'install', 'flathub', pkg_name], 
+                                      capture_output=True, text=True)
+            elif source == 'snap':
+                result = subprocess.run(['sudo', 'snap', 'install', pkg_name], 
+                                      capture_output=True, text=True)
+            elif source == 'lilith':
+                # In a real implementation, this would install from Lilith repo
+                result = subprocess.run(['sudo', 'apt', 'install', '-y', pkg_name], 
+                                      capture_output=True, text=True)  # Using apt as fallback
+            elif source == 'ollama':
+                result = subprocess.run(['ollama', 'pull', pkg_name], 
+                                      capture_output=True, text=True)
+            else:
+                self.progress.emit(f"Unknown package source: {source}")
+                self.finished.emit(False)
+                return
+            
+            if result.returncode == 0:
+                self.progress.emit(f"✅ {pkg_name} from {source} installed successfully!")
+                self.finished.emit(True)
+            else:
+                self.progress.emit(f"❌ Error installing {pkg_name}: {result.stderr}")
+                self.finished.emit(False)
+                
+        except Exception as e:
+            self.progress.emit(f"Exception during installation: {str(e)}")
+            self.finished.emit(False)
+
+class DownloadManager:
+    """Manages downloads using axel or aria2 for fastest concurrent downloads"""
+    
+    @staticmethod
+    def is_axel_available():
+        """Check if axel is available"""
+        return subprocess.run(['which', 'axel'], capture_output=True).returncode == 0
+    
+    @staticmethod
+    def is_aria2_available():
+        """Check if aria2 is available"""
+        return subprocess.run(['which', 'aria2c'], capture_output=True).returncode == 0
+    
+    @staticmethod
+    def download_with_fastest(url, output_path):
+        """Download using the fastest available downloader"""
+        if DownloadManager.is_axel_available():
+            cmd = ['axel', '-n', '10', '-o', output_path, url]
+        elif DownloadManager.is_aria2_available():
+            cmd = ['aria2c', '-x', '10', '-s', '10', '-o', output_path, url]
+        else:
+            # Fallback to wget
+            cmd = ['wget', '-O', output_path, url]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            return result.returncode == 0
+        except:
+            return False
+
+class OfferingsGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Lilith Offerings")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # Set style
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1a1a2e;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #16213e;
+                color: white;
+                border: 1px solid #0f3460;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #0f3460;
+            }
+            QTabWidget::pane {
+                border: 1px solid #0f3460;
+                background-color: #1a1a2e;
+            }
+            QTabBar::tab {
+                background: #0f3460;
+                padding: 8px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #16213e;
+            }
+            QListWidget {
+                background-color: #16213e;
+                color: white;
+                border: 1px solid #0f3460;
+            }
+            QLineEdit {
+                background-color: #16213e;
+                color: white;
+                border: 1px solid #0f3460;
+                padding: 5px;
+            }
+            QTextEdit {
+                background-color: #0f1c2e;
+                color: #e0e0e0;
+                border: 1px solid #0f3460;
+            }
+            QComboBox {
+                background-color: #16213e;
+                color: white;
+                padding: 5px;
+                border: 1px solid #0f3460;
+                border-radius: 3px;
+            }
+        """)
+        
+        self.init_ui()
+        self.load_all_packages()
+        
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
+        
+        # Title
+        title_label = QLabel("🔥 Lilith Offerings 🔥")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+        
+        subtitle = QLabel("Universal App Store & AI Model Hub")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setFont(QFont("Arial", 12))
+        layout.addWidget(subtitle)
+        
+        layout.addSpacing(10)
+        
+        # Search and filter bar
+        search_layout = QHBoxLayout()
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search for apps, AI models, or binaries...")
+        self.search_input.textChanged.connect(self.filter_packages)
+        
+        self.source_filter = QComboBox()
+        self.source_filter.addItems(["All Sources", "Apt", "Flatpak", "Snap", "Lilith", "AI Models"])
+        
+        search_layout.addWidget(QLabel("Search:"))
+        search_layout.addWidget(self.search_input)
+        search_layout.addWidget(QLabel("Source:"))
+        search_layout.addWidget(self.source_filter)
+        
+        layout.addLayout(search_layout)
+        
+        layout.addSpacing(10)
+        
+        # Main tabs
+        self.tabs = QTabWidget()
+        
+        # AI Models Tab
+        self.ai_models_tab = QWidget()
+        ai_layout = QVBoxLayout()
+        self.ai_models_tab.setLayout(ai_layout)
+        
+        ai_header = QHBoxLayout()
+        ai_label = QLabel("AI Models (Hardware-Optimized):")
+        self.ai_refresh_btn = QPushButton("Refresh AI Models")
+        self.ai_refresh_btn.clicked.connect(self.refresh_ai_models)
+        ai_header.addWidget(ai_label)
+        ai_header.addWidget(self.ai_refresh_btn)
+        ai_layout.addLayout(ai_header)
+        
+        self.ai_models_list = QListWidget()
+        ai_layout.addWidget(self.ai_models_list)
+        
+        # Apt Packages Tab (Synaptic wrapper)
+        self.apt_packages_tab = QWidget()
+        apt_layout = QVBoxLayout()
+        self.apt_packages_tab.setLayout(apt_layout)
+        
+        apt_header = QHBoxLayout()
+        apt_label = QLabel("Apt Packages:")
+        self.apt_refresh_btn = QPushButton("Refresh Apt Packages")
+        self.apt_refresh_btn.clicked.connect(self.refresh_apt_packages)
+        apt_header.addWidget(apt_label)
+        apt_header.addWidget(self.apt_refresh_btn)
+        apt_layout.addLayout(apt_header)
+        
+        self.apt_packages_list = QListWidget()
+        apt_layout.addWidget(self.apt_packages_list)
+        
+        # Lilith Binaries Tab
+        self.lilith_binaries_tab = QWidget()
+        binaries_layout = QVBoxLayout()
+        self.lilith_binaries_tab.setLayout(binaries_layout)
+        
+        binaries_header = QHBoxLayout()
+        binaries_label = QLabel("Official Lilith Binaries:")
+        self.binaries_refresh_btn = QPushButton("Refresh Binaries")
+        self.binaries_refresh_btn.clicked.connect(self.refresh_lilith_binaries)
+        binaries_header.addWidget(binaries_label)
+        binaries_header.addWidget(self.binaries_refresh_btn)
+        binaries_layout.addLayout(binaries_header)
+        
+        self.lilith_binaries_list = QListWidget()
+        binaries_layout.addWidget(self.lilith_binaries_list)
+        
+        # Other Sources Tab
+        self.other_sources_tab = QWidget()
+        other_layout = QVBoxLayout()
+        self.other_sources_tab.setLayout(other_layout)
+        
+        other_header = QHBoxLayout()
+        other_label = QLabel("Other Sources (Flatpak, Snap, etc.):")
+        self.other_refresh_btn = QPushButton("Refresh Other Sources")
+        self.other_refresh_btn.clicked.connect(self.refresh_other_sources)
+        other_header.addWidget(other_label)
+        other_header.addWidget(self.other_refresh_btn)
+        other_layout.addLayout(other_header)
+        
+        # Sub-tabs for different sources
+        self.other_sources_tabs = QTabWidget()
+        
+        # Flatpak sub-tab
+        flatpak_widget = QWidget()
+        flatpak_layout = QVBoxLayout()
+        self.flatpak_list = QListWidget()
+        flatpak_layout.addWidget(self.flatpak_list)
+        flatpak_widget.setLayout(flatpak_layout)
+        self.other_sources_tabs.addTab(flatpak_widget, "Flatpak")
+        
+        # Snap sub-tab
+        snap_widget = QWidget()
+        snap_layout = QVBoxLayout()
+        self.snap_list = QListWidget()
+        snap_layout.addWidget(self.snap_list)
+        snap_widget.setLayout(snap_layout)
+        self.other_sources_tabs.addTab(snap_widget, "Snap")
+        
+        other_layout.addWidget(self.other_sources_tabs)
+        
+        # Add tabs
+        self.tabs.addTab(self.ai_models_tab, "AI Models")
+        self.tabs.addTab(self.apt_packages_tab, "Apt Packages")
+        self.tabs.addTab(self.lilith_binaries_tab, "Lilith Binaries")
+        self.tabs.addTab(self.other_sources_tab, "Other Sources")
+        
+        layout.addWidget(self.tabs)
+        
+        # Install button and log
+        button_layout = QHBoxLayout()
+        
+        self.install_btn = QPushButton("Install Selected")
+        self.install_btn.clicked.connect(self.install_selected)
+        button_layout.addWidget(self.install_btn)
+        
+        self.refresh_all_btn = QPushButton("Refresh All")
+        self.refresh_all_btn.clicked.connect(self.load_all_packages)
+        button_layout.addWidget(self.refresh_all_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Log output
+        log_label = QLabel("Installation Log:")
+        layout.addWidget(log_label)
+        
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+        layout.addWidget(self.log_output)
+        
+        # Add initial log
+        self.log_output.append("Welcome to Lilith Offerings! Browse packages from multiple sources.")
+        self.log_output.append(f"Fast download manager available: {'axel' if DownloadManager.is_axel_available() else 'aria2' if DownloadManager.is_aria2_available() else 'wget'}")
+        
+        # Connect list selections
+        self.ai_models_list.itemClicked.connect(lambda item: self.show_package_details(item, 'ai'))
+        self.apt_packages_list.itemClicked.connect(lambda item: self.show_package_details(item, 'apt'))
+        self.lilith_binaries_list.itemClicked.connect(lambda item: self.show_package_details(item, 'lilith'))
+        self.flatpak_list.itemClicked.connect(lambda item: self.show_package_details(item, 'flatpak'))
+        self.snap_list.itemClicked.connect(lambda item: self.show_package_details(item, 'snap'))
+        
+        # Thread for installation
+        self.install_thread = None
+    
+    def load_all_packages(self):
+        """Load packages from all sources"""
+        self.log_output.append("Loading packages from all sources...")
+        
+        # Load AI models
+        self.refresh_ai_models()
+        
+        # Load Apt packages
+        self.refresh_apt_packages()
+        
+        # Load Lilith binaries
+        self.refresh_lilith_binaries()
+        
+        # Load other sources
+        self.refresh_other_sources()
+        
+        self.log_output.append("All packages loaded!")
+    
+    def refresh_ai_models(self):
+        """Refresh the AI models list"""
+        self.ai_models_list.clear()
+        
+        models = AIModelManager.get_optimized_models_for_hardware()
+        for model in models:
+            item = QListWidgetItem(f"{model['name']} ({model['size']})")
+            item.setData(Qt.ItemDataRole.UserRole, {**model, 'type': 'ai_model'})
+            self.ai_models_list.addItem(item)
+    
+    def refresh_apt_packages(self):
+        """Refresh the apt packages list"""
+        self.apt_packages_list.clear()
+        
+        packages = PackageManager.get_apt_packages()
+        for pkg in packages:
+            status_icon = "🔄" if pkg['status'] == 'upgradable' else "📦"
+            item = QListWidgetItem(f"{status_icon} {pkg['name']} - {pkg['status']}")
+            item.setData(Qt.ItemDataRole.UserRole, {**pkg, 'type': 'package'})
+            self.apt_packages_list.addItem(item)
+    
+    def refresh_lilith_binaries(self):
+        """Refresh the Lilith binaries list"""
+        self.lilith_binaries_list.clear()
+        
+        binaries = PackageManager.get_lilith_binaries()
+        for binary in binaries:
+            status_icon = "✅" if binary['status'] == 'installed' else "📦"
+            item = QListWidgetItem(f"{status_icon} {binary['name']} - {binary['status']}")
+            item.setData(Qt.ItemDataRole.UserRole, {**binary, 'type': 'binary'})
+            self.lilith_binaries_list.addItem(item)
+    
+    def refresh_other_sources(self):
+        """Refresh packages from other sources (Flatpak, Snap)"""
+        # Flatpak
+        self.flatpak_list.clear()
+        
+        flatpak_packages = PackageManager.get_flatpak_packages()
+        for pkg in flatpak_packages:
+            item = QListWidgetItem(f"📦 {pkg['name']}")
+            item.setData(Qt.ItemDataRole.UserRole, {**pkg, 'type': 'package'})
+            self.flatpak_list.addItem(item)
+        
+        # Snap
+        self.snap_list.clear()
+        
+        snap_packages = PackageManager.get_snap_packages()
+        for pkg in snap_packages:
+            item = QListWidgetItem(f"📦 {pkg['name']}")
+            item.setData(Qt.ItemDataRole.UserRole, {**pkg, 'type': 'package'})
+            self.snap_list.addItem(item)
+    
+    def filter_packages(self, text):
+        """Filter packages based on search text"""
+        current_tab = self.tabs.currentIndex()
+        
+        # Filter AI models
+        for i in range(self.ai_models_list.count()):
+            item = self.ai_models_list.item(i)
+            pkg_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in pkg_data['name'].lower())
+        
+        # Filter Apt packages
+        for i in range(self.apt_packages_list.count()):
+            item = self.apt_packages_list.item(i)
+            pkg_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in pkg_data['name'].lower())
+        
+        # Filter Lilith binaries
+        for i in range(self.lilith_binaries_list.count()):
+            item = self.lilith_binaries_list.item(i)
+            binary_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in binary_data['name'].lower())
+        
+        # Filter Flatpak packages
+        for i in range(self.flatpak_list.count()):
+            item = self.flatpak_list.item(i)
+            pkg_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in pkg_data['name'].lower())
+        
+        # Filter Snap packages
+        for i in range(self.snap_list.count()):
+            item = self.snap_list.item(i)
+            pkg_data = item.data(Qt.ItemDataRole.UserRole)
+            item.setHidden(text.lower() not in pkg_data['name'].lower())
+    
+    def show_package_details(self, item, source_type):
+        """Show details for selected package"""
+        pkg_data = item.data(Qt.ItemDataRole.UserRole)
+        
+        details = f"""
+        <h3>{pkg_data['name']}</h3>
+        <p><b>Description:</b> {pkg_data.get('description', 'No description available')}</p>
+        <p><b>Source:</b> {pkg_data['source']}</p>
+        <p><b>Status:</b> {pkg_data.get('status', 'Available')}</p>
+        """
+        
+        if pkg_data.get('size'):
+            details += f"<p><b>Size:</b> {pkg_data.get('size')}</p>"
+        
+        details += f"<p><b>Type:</b> {pkg_data.get('type', 'Package')}</p>"
+        
+        # Add to log for user information
+        self.log_output.append(f"Selected: {pkg_data['name']} from {pkg_data['source']}")
+    
+    def install_selected(self):
+        """Install the currently selected package from any tab"""
+        current_tab = self.tabs.currentIndex()
+        selected_item = None
+        package_data = None
+        
+        # Check which tab is currently active and get the selected item
+        if current_tab == 0:  # AI Models tab
+            selected_item = self.ai_models_list.currentItem()
+            if selected_item:
+                package_data = selected_item.data(Qt.ItemDataRole.UserRole)
+        elif current_tab == 1:  # Apt Packages tab
+            selected_item = self.apt_packages_list.currentItem()
+            if selected_item:
+                package_data = selected_item.data(Qt.ItemDataRole.UserRole)
+        elif current_tab == 2:  # Lilith Binaries tab
+            selected_item = self.lilith_binaries_list.currentItem()
+            if selected_item:
+                package_data = selected_item.data(Qt.ItemDataRole.UserRole)
+        elif current_tab == 3:  # Other Sources tab
+            # Check which sub-tab is active
+            other_current_tab = self.other_sources_tabs.currentIndex()
+            if other_current_tab == 0:  # Flatpak
+                selected_item = self.flatpak_list.currentItem()
+                if selected_item:
+                    package_data = selected_item.data(Qt.ItemDataRole.UserRole)
+            elif other_current_tab == 1:  # Snap
+                selected_item = self.snap_list.currentItem()
+                if selected_item:
+                    package_data = selected_item.data(Qt.ItemDataRole.UserRole)
+        
+        if not package_data:
+            QMessageBox.warning(self, "No Selection", "Please select a package to install.")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Installation",
+            f"Install {package_data['name']} from {package_data['source']}?\n\nDescription: {package_data.get('description', 'No description')}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.log_output.append(f"Starting installation of {package_data['name']} from {package_data['source']}...")
+            
+            # Disable button during installation
+            self.install_btn.setEnabled(False)
+            
+            # Start installation thread
+            self.install_thread = PackageInstallerThread(package_data)
+            self.install_thread.progress.connect(self.update_log)
+            self.install_thread.finished.connect(self.installation_finished)
+            self.install_thread.start()
+    
+    def update_log(self, message):
+        self.log_output.append(message)
+        
+    def installation_finished(self, success):
+        self.install_btn.setEnabled(True)
+        
+        if success:
+            QMessageBox.information(
+                self,
+                "Installation Complete",
+                "Package installed successfully!"
+            )
+        else:
+            QMessageBox.critical(
+                self,
+                "Installation Failed",
+                "Installation failed. Please check the log for details."
+            )
+
+def main():
+    app = QApplication(sys.argv)
+    window = OfferingsGUI()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

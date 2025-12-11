@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Lilith Offerings
+Comment=Universal App Store & AI Model Hub
+Exec=/usr/bin/lilith-offerings
+Icon=applications-other
+Terminal=false
+Type=Application
+Categories=PackageManager;Utility;
+Keywords=package;manager;ai;model;store;

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Lilith Package Request
+Comment=Request Official Package from GitHub
+Exec=/usr/bin/lilith-package-request
+Icon=mail-message-new
+Terminal=false
+Type=Application
+Categories=Utility;Development;
+Keywords=package;request;github;development;
