@@ -365,12 +365,11 @@ systemctl enable lilith-daemon.service 2>/dev/null || true
 
 # Set up hotkey (Super+Space)
 log "🔥 Setting up hotkey (Super+Space)..."
-mkdir -p /home/queen/.config/sxhkd
-tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null << 'EOF'
+sudo -u queen mkdir -p /home/queen/.config/sxhkd
+sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null << 'EOF'
 super + space
     /opt/lilith/scripts/summon-assistant.sh
 EOF
-chown queen:queen /home/queen/.config/sxhkd/sxhkdrc
 
 # Clean up
 rm -f "$BUNDLE_FILE"
