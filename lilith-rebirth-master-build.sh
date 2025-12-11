@@ -289,7 +289,7 @@ setup_first_boot() {
     fi
 
     # Create lilith-post-install.sh for first boot
-    sudo tee /opt/lilith-firstboot/lilith-post-install.sh > /dev/null << 'EOF'
+    sudo tee /opt/lilith-firstboot/lilith-post-install.sh > /dev/null << "EOF"
 #!/bin/bash
 # Lilith Post-Install Script - Runs on first boot
 
