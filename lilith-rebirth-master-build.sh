@@ -370,6 +370,7 @@ sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null << 'EOF'
 super + space
     /opt/lilith/scripts/summon-assistant.sh
 EOF
+sudo chown queen:queen /home/queen/.config/sxhkd/sxhkdrc
 
 # Clean up
 rm -f "$BUNDLE_FILE"

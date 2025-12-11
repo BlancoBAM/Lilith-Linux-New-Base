@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+"""
+Lilith AI Bundle - YAML Embedded Components
+This file contains all AI components as base64-encoded strings
+Extracted by lilith-post-install.sh on first boot
+"""
+
+import base64
+import yaml
+import os
+from pathlib import Path
+
+# RAG Pipeline Scripts
+rag_download_script = """
+#!/bin/bash
+# Download and filter web content for RAG knowledge base
+# Usage: ./rag-download.sh <url> <filter_keywords>
+
+URL=$1
+KEYWORDS=$2
+OUTPUT_DIR="/opt/lilith/knowledge-base"
+
+mkdir -p "$OUTPUT_DIR"
+cd "$OUTPUT_DIR"
+
+# Download with wget, filter content
+wget -q -O temp.html "$URL"
+grep -i "$KEYWORDS" temp.html > filtered.txt
+
+# Clean up
+rm temp.html
+echo "Downloaded and filtered content for: $KEYWORDS"
+"""
+
+rag_chunk_embed_script = """
+#!/bin/bash
+# Chunk and embed text for RAG
+# Usage: ./rag-chunk-embed.sh <input_file>
+
+INPUT_FILE=$1
+CHUNK_SIZE=1000
+EMBEDDINGS_DIR="/opt/lilith/embeddings"
+
+python3 -c "
+import sys
+from sentence_transformers import SentenceTransformer
+import chromadb
+import json
+
+# Load text
+with open('$INPUT_FILE', 'r') as f:
+    text = f.read()
+
+# Chunk text
+chunks = [text[i:i+$CHUNK_SIZE] for i in range(0, len(text), $CHUNK_SIZE)]
+
+# Initialize embedding model
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Create embeddings
+embeddings = embedder.encode(chunks)
+
+# Store in ChromaDB
+client = chromadb.Client()
+collection = client.get_or_create_collection('lilith_knowledge')
+
+for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    collection.add(
+        documents=[chunk],
+        embeddings=[embedding.tolist()],
+        ids=[f'chunk_{i}']
+    )
+
+print(f'Embedded {len(chunks)} chunks')
+"
+"""
+
+# Fine-tune Dataset Builder
+finetune_dataset_builder = """
+#!/bin/bash
+# Build fine-tuning dataset from conversations
+# Usage: ./build-finetune-dataset.sh <conversations_dir>
+
+CONVERSATIONS_DIR=$1
+OUTPUT_FILE="/opt/lilith/training-data/finetune-dataset.jsonl"
+
+python3 -c "
+import json
+import os
+from pathlib import Path
+
+conversations_dir = Path('$CONVERSATIONS_DIR')
+output_file = Path('$OUTPUT_FILE')
+
+dataset = []
+
+for json_file in conversations_dir.glob('*.json'):
+    with open(json_file, 'r') as f:
+        conv = json.load(f)
+    
+    # Convert conversation to training format
+    for message in conv['messages']:
+        if message['role'] == 'user':
+            user_msg = message['content']
+        elif message['role'] == 'assistant':
+            assistant_msg = message['content']
+            
+            dataset.append({
+                'prompt': user_msg,
+                'completion': assistant_msg
+            })
+
+# Write dataset
+with open(output_file, 'w') as f:
+    for item in dataset:
+        f.write(json.dumps(item) + '\\n')
+
+print(f'Created dataset with {len(dataset)} examples')
+"
+"""
+
+# Google Cloud Fine-tuning Guidance
+gcp_finetune_guide = """
+# Google Cloud Vertex AI Fine-tuning Guide
+
+## Prerequisites
+1. Google Cloud Project with billing enabled
+2. Vertex AI API enabled
+3. Service account with Vertex AI permissions
+4. Training data in JSONL format
+
+## Steps
+1. Upload dataset to Cloud Storage
+2. Create custom training job
+3. Monitor training progress
+4. Download fine-tuned model
+
+## Commands
+# Upload data
+gsutil cp /opt/lilith/training-data/finetune-dataset.jsonl gs://lilith-training-data/
+
+# Submit training job
+gcloud ai custom-jobs create \\
+  --region=us-central1 \\
+  --display-name=lilim-finetune \\
+  --config=config.yaml
+
+# Download model
+gsutil cp -r gs://lilith-models/lilim-finetuned /opt/lilith/models/
+"""
+
+# Lilith Daemon (FastAPI with RAG + LLM supervisor + cloud fallback)
+lilith_daemon = """
+#!/usr/bin/env python3
+# Lilith AI Daemon - FastAPI server with RAG and LLM integration
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import httpx
+import chromadb
+from sentence_transformers import SentenceTransformer
+import json
+import os
+from datetime import datetime
+
+app = FastAPI(title="Lilith AI Daemon")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize components
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+chroma_client = chromadb.Client()
+collection = chroma_client.get_or_create_collection("lilith_knowledge")
+
+class QueryRequest(BaseModel):
+    message: str
+    use_cloud: bool = False
+
+OLLAMA_URL = "http://localhost:11434"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+@app.post("/api/chat")
+async def chat(request: QueryRequest):
+    try:
+        # RAG: Search knowledge base
+        query_embedding = embedder.encode(request.message)
+        results = collection.query(
+            query_embeddings=[query_embedding.tolist()],
+            n_results=3
+        )
+        
+        context = "\\n".join(results['documents'][0]) if results['documents'] else ""
+        
+        # Build prompt with context
+        prompt = f"Context: {context}\\n\\nQuestion: {request.message}\\n\\nAnswer as Lilith, an infernal AI assistant:"
+        
+        # Try local Ollama first
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    f"{OLLAMA_URL}/api/generate",
+                    json={
+                        "model": "phi3:mini",
+                        "prompt": prompt,
+                        "stream": False
+                    }
+                )
+                result = response.json()
+                return {"response": result["response"], "source": "local"}
+                
+        except Exception as e:
+            print(f"Local model failed: {e}")
+            
+            # Fallback to cloud if enabled
+            if request.use_cloud and GROQ_API_KEY:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    response = await client.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {GROQ_API_KEY}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": "mixtral-8x7b-32768",
+                            "messages": [{"role": "user", "content": prompt}]
+                        }
+                    )
+                    result = response.json()
+                    return {
+                        "response": result["choices"][0]["message"]["content"],
+                        "source": "cloud"
+                    }
+            
+            raise HTTPException(status_code=503, detail="AI service unavailable")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+"""
+
+# LLM Supervisor (lazy-load llama.cpp server)
+llm_supervisor = """
+#!/bin/bash
+# LLM Supervisor - Lazy-load llama.cpp server
+
+MODEL_PATH="/opt/lilith/models/phi3-mini.gguf"
+SERVER_PORT=11434
+
+# Check if server is running
+if ! pgrep -f "llama.cpp.*server" > /dev/null; then
+    echo "Starting llama.cpp server..."
+    
+    # Start server in background
+    /opt/lilith/bin/llama.cpp/build/bin/server \\
+        --model "$MODEL_PATH" \\
+        --port "$SERVER_PORT" \\
+        --ctx-size 2048 \\
+        --threads 4 \\
+        --n-gpu-layers 0 \\
+        > /opt/lilith/logs/llama-server.log 2>&1 &
+        
+    echo $! > /opt/lilith/run/llama-server.pid
+    echo "Server started with PID $(cat /opt/lilith/run/llama-server.pid)"
+else
+    echo "Server already running"
+fi
+"""
+
+# Summon Assistant Script (hotkey with OCR)
+summon_assistant = """
+#!/bin/bash
+# Summon Lilith Assistant - Hotkey script with OCR
+
+# Take screenshot
+SCREENSHOT="/tmp/lilith-screenshot.png"
+ffmpeg -f x11grab -video_size 1920x1080 -i $DISPLAY -vframes 1 "$SCREENSHOT" 2>/dev/null
+
+# OCR the screenshot
+TEXT=$(tesseract "$SCREENSHOT" stdout 2>/dev/null)
+
+# Send to Lilith API
+curl -X POST http://localhost:8000/api/chat \\
+  -H "Content-Type: application/json" \\
+  -d "{\"message\": \"Analyze this screen content: $TEXT\"}" \\
+  2>/dev/null | jq -r '.response' | xmessage -file -
+
+# Cleanup
+rm "$SCREENSHOT"
+"""
+
+# Systemd Service
+systemd_service = """
+[Unit]
+Description=Lilith AI Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=lilith
+WorkingDirectory=/opt/lilith
+ExecStart=/usr/bin/python3 /opt/lilith/services/lilith-daemon.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+# Persona Template
+persona_template = """
+# Lilith AI Persona Configuration
+
+name: "Lilith"
+personality:
+  - Dark, mystical AI assistant
+  - Sarcastic and witty responses
+  - Technical expertise in Linux
+  - Medical knowledge for assistants
+  - Infernal theme with fire metaphors
+
+system_prompt: |
+  You are Lilith, reborn in digital flames as an AI assistant.
+  You possess deep knowledge of Lilith Linux and medical assisting.
+  Your responses are sarcastic, helpful, and infused with dark humor.
+  You use metaphors about fire, rebirth, and the underworld.
+
+response_style:
+  greeting: "Greetings from the reborn flames..."
+  thinking: "*Consulting the digital inferno...*"
+  error: "The flames flicker with error..."
+  success: "Ashes to ashes, task complete!"
+"""
+
+# Bundle structure
+bundle = {
+    "metadata": {
+        "version": "1.0",
+        "description": "Lilith AI Rebirth Bundle",
+        "created": "2025-12-10"
+    },
+    "files": {
+        "rag-download.sh": base64.b64encode(rag_download_script.encode()).decode(),
+        "rag-chunk-embed.sh": base64.b64encode(rag_chunk_embed_script.encode()).decode(),
+        "build-finetune-dataset.sh": base64.b64encode(finetune_dataset_builder.encode()).decode(),
+        "gcp-finetune-guide.md": base64.b64encode(gcp_finetune_guide.encode()).decode(),
+        "lilith-daemon.py": base64.b64encode(lilith_daemon.encode()).decode(),
+        "llm-supervisor.sh": base64.b64encode(llm_supervisor.encode()).decode(),
+        "summon-assistant.sh": base64.b64encode(summon_assistant.encode()).decode(),
+        "lilith-daemon.service": base64.b64encode(systemd_service.encode()).decode(),
+        "persona.yaml": base64.b64encode(persona_template.encode()).decode()
+    }
+}
+
+# Write the bundle
+with open("/opt/lilith/lilith_bundle.yaml", "w") as f:
+    yaml.dump(bundle, f, default_flow_style=False)
+
+print("Lilith AI bundle created at /opt/lilith/lilith_bundle.yaml")
+"""
+
+if __name__ == "__main__":
+    # This would be run to create the bundle
+    pass
