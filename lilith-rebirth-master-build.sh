@@ -366,11 +366,11 @@ systemctl enable lilith-daemon.service 2>/dev/null || true
 # Set up hotkey (Super+Space)
 log "🔥 Setting up hotkey (Super+Space)..."
 sudo -u queen mkdir -p /home/queen/.config/sxhkd
-sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null << 'EOF'
+cat << 'EOF' | sudo -u queen tee /home/queen/.config/sxhkd/sxhkdrc > /dev/null
 super + space
     /opt/lilith/scripts/summon-assistant.sh
 EOF
-sudo chown queen:queen /home/queen/.config/sxhkd/sxhkdrc
+sudo chown queen:queen /home/queen/.config/sxhkd/sxhkdrc 2>/dev/null || log "Note: File ownership may already be correct"
 
 # Clean up
 rm -f "$BUNDLE_FILE"
